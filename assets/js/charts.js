@@ -68,11 +68,11 @@ export function chartsToTables(markdown) {
   });
 }
 
-function cssVar(name, el = document.documentElement) {
+export function cssVar(name, el = document.documentElement) {
   return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
-function el(tag, attrs = {}, children = []) {
+export function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === 'text') node.textContent = v;

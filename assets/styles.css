@@ -883,6 +883,14 @@ input[type='radio'] {
   font-size: 0.8rem !important;
 }
 
+.diagram-figure {
+  max-width: 520px;
+}
+
+.diagram-canvas {
+  height: 360px;
+}
+
 .chart-placeholder {
   margin: 1em 0;
   padding: 40px 16px;

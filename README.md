@@ -11,7 +11,10 @@ A website that uses the [OpenRouter](https://openrouter.ai) API to generate Sing
 - **Controls**: syllabus topics (codes 1.1.1–3.3.1), context (Singapore, another economy, or a specific issue you type in), difficulty, and extra instructions.
 - **Answers**: choose questions only, questions with suggested answers, or answers plus mark schemes, and full model answers or outlines. Answers stay **hidden until you reveal them**, so students can try the questions first. If you chose questions only, you can generate the answers later.
 - **Follow-ups** on the same paper, for example "mark my answer to (c)(ii)", "make (d) harder" or "give me revision notes".
-- **Figures** are drawn as real charts with a data-table view. Economics diagrams in answers are described in words and drawn as labelled ASCII sketches.
+- **Charts and diagrams are drawn with Chart.js.**
+  - Case-study data figures (line and bar charts) come with a data-table view.
+  - Economics diagrams (D&S, tax/subsidy, externality and DWL, firm cost/revenue, PPC, AD/AS, tariff, Lorenz) are drawn with labelled curves, shifted curves highlighted, equilibrium points with dashed P0/Q0 guides, shaded areas and shift arrows.
+  - Equilibria are worked out from where the curves actually cross, so the points always sit on the lines.
 - **Other features**: copy, download as Markdown (with or without answers, with figures turned into tables), print (answers print only when revealed), history saved in the browser, light and dark themes, a mobile layout, and any OpenRouter model (`anthropic/claude-sonnet-5.5` by default).
 
 ## Model, reasoning and speed
@@ -66,7 +69,7 @@ The browser then sends requests to `POST /api/chat` on `server.js`, which forwar
    - write Markdown
    - give marks as `[n]`
    - put chart data in ```` ```chart ```` JSON blocks
-   - draw diagrams as ASCII sketches
+   - put economics diagrams in ```` ```diagram ```` JSON blocks (curves, points such as `"intersect": ["S0", "D1"]`, shaded areas and arrows in a 0–10 coordinate space)
    - write a `=== ANSWERS ===` line between the questions and the answers, which the UI uses to hide the answers
 
    For `anthropic/*` models this message is marked for prompt caching, so repeat requests cost less.
@@ -86,7 +89,8 @@ npm test   # node:test, covering the prompt builder, SSE streaming parser, chart
 | `assets/js/app.js` | Form, streaming, rendering, history and export |
 | `assets/js/prompts.js` | Prompt construction and question/answer splitting |
 | `assets/js/openrouter.js` | OpenRouter streaming client |
-| `assets/js/charts.js` | Chart parsing and Chart.js rendering |
+| `assets/js/charts.js` | Data-chart parsing and Chart.js rendering |
+| `assets/js/diagrams.js` | Economics-diagram parsing (intersections, spline curves, area vertices) and Chart.js rendering |
 | `assets/js/syllabus.js` | Syllabus topic list |
 | `server.js` | Optional static server and key-holding proxy |
 
