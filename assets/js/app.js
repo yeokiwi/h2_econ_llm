@@ -9,7 +9,7 @@ import {
   splitAnswers,
   extractTitle,
 } from './prompts.js';
-import { OPENROUTER_URL, streamChat, fetchModels } from './openrouter.js';
+import { OPENROUTER_URL, streamChat, fetchModels, reasoningFor } from './openrouter.js';
 import { parseChartSpec, createChartFigure, chartsToTables } from './charts.js';
 
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-5.5';
@@ -21,6 +21,7 @@ const SUGGESTED_MODELS = [
   'deepseek/deepseek-v4-pro',
 ];
 const HISTORY_LIMIT = 25;
+const DEFAULT_MAX_TOKENS = 32000;
 
 const $ = (sel) => document.querySelector(sel);
 const form = $('#genForm');
@@ -61,6 +62,8 @@ const state = {
   answersRevealed: false,
   controller: null,
   busy: false,
+  thinkingText: '', // reasoning streamed so far for the current request (not saved)
+  modelInfo: new Map(), // model id -> { maxCompletion, reasoning } from OpenRouter's catalogue
 };
 
 // ---------- Markdown rendering ----------
@@ -178,8 +181,9 @@ function readModelOptions() {
   const fd = new FormData(form);
   const model = String(fd.get('model') || '').trim() || state.proxy?.defaultModel || DEFAULT_MODEL;
   const temperature = Number(fd.get('temperature'));
-  const maxTokens = Number(fd.get('maxTokens')) || 16000;
-  return { model, temperature, maxTokens };
+  const maxTokens = Number(fd.get('maxTokens')) || DEFAULT_MAX_TOKENS;
+  const reasoningEffort = String(fd.get('reasoningEffort') || 'low');
+  return { model, temperature, maxTokens, reasoningEffort };
 }
 
 function writeSettings(settings) {
@@ -223,7 +227,9 @@ function restoreForm() {
     writeSettings(saved.settings || {});
     if (saved.model) form.elements.model.value = saved.model;
     if (saved.temperature !== undefined) form.elements.temperature.value = saved.temperature;
-    if (saved.maxTokens) form.elements.maxTokens.value = saved.maxTokens;
+    // 16000 was the old default, too small once reasoning tokens are counted
+    if (saved.maxTokens && saved.maxTokens !== 16000) form.elements.maxTokens.value = saved.maxTokens;
+    if (saved.reasoningEffort) form.elements.reasoningEffort.value = saved.reasoningEffort;
   }
   $('#tempOut').textContent = form.elements.temperature.value;
   syncFormVisibility();
@@ -293,6 +299,7 @@ async function loadModels() {
   SUGGESTED_MODELS.forEach((id) => add(id, 'Suggested'));
   try {
     const models = await fetchModels();
+    models.forEach((m) => state.modelInfo.set(m.id, m));
     const known = new Set(SUGGESTED_MODELS);
     models
       .filter((m) => !known.has(m.id))
@@ -456,11 +463,46 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
     session.turns.push(assistant);
   }
 
-  const { model, temperature, maxTokens } = { ...readModelOptions(), model: session.model };
+  const opts = readModelOptions();
+  const model = session.model;
+  const info = state.modelInfo.get(model);
+  const maxTokens = info?.maxCompletion ? Math.min(opts.maxTokens, info.maxCompletion) : opts.maxTokens;
+  const reasoning = reasoningFor(opts.reasoningEffort, info);
+  const body = { model, messages, temperature: opts.temperature, max_tokens: maxTokens };
+  if (reasoning) body.reasoning = reasoning;
+
   state.controller = new AbortController();
   setBusy(true);
-  setStatus('Waiting for the model…');
   renderSession({ streaming: true });
+
+  // Live progress, so a model that reasons before writing doesn't look frozen.
+  const started = Date.now();
+  let phase = 'waiting'; // 'waiting' | 'thinking' | 'writing'
+  state.thinkingText = '';
+  const thinking = $('#thinking');
+  const showProgress = () => {
+    if (phase === 'writing') return;
+    const secs = Math.round((Date.now() - started) / 1000);
+    const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    let text;
+    if (phase === 'thinking') {
+      const words = (state.thinkingText.match(/\S+/g) || []).length;
+      text = `The model is thinking before it writes… ${clock}${words ? ` · ${words.toLocaleString('en-GB')} words of reasoning` : ''}`;
+    } else {
+      text = `Waiting for the model… ${clock}`;
+    }
+    if (secs >= 45) {
+      text += reasoning?.effort === 'low' || reasoning?.effort === 'minimal'
+        ? '. Long papers can take a few minutes.'
+        : '. For faster replies, set Reasoning effort to Low under Model & advanced settings.';
+    }
+    setStatus(text);
+  };
+  showProgress();
+  const ticker = setInterval(showProgress, 1000);
+  thinking.hidden = true;
+  thinking.open = false;
+  $('#thinkingText').textContent = '';
 
   let renderTimer = null;
   const scheduleRender = () => {
@@ -471,30 +513,44 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
     }, 120);
   };
 
-  let sawReasoning = false;
   try {
     const result = await streamChat({
       ...conn,
       signal: state.controller.signal,
-      body: { model, messages, temperature, max_tokens: maxTokens },
+      body,
       onDelta: (text) => {
-        if (!assistant.content && !prior) setStatus('');
+        if (phase !== 'writing') {
+          phase = 'writing';
+          setStatus('');
+          thinking.hidden = true;
+        }
         assistant.content += text;
         scheduleRender();
       },
-      onReasoning: () => {
-        if (!sawReasoning && !assistant.content) setStatus('The model is thinking…');
-        sawReasoning = true;
+      onReasoning: (text) => {
+        if (phase === 'writing') return;
+        if (phase === 'waiting') {
+          phase = 'thinking';
+          showProgress();
+        }
+        if (text) {
+          state.thinkingText += text;
+          thinking.hidden = false;
+          if (thinking.open) $('#thinkingText').textContent = state.thinkingText.slice(-4000);
+        }
       },
     });
     assistant.model = result.model || model;
     assistant.usage = mergeUsage(appendTo ? assistant.usage : null, result.usage);
     assistant.finishReason = result.finishReason;
     if (!assistant.content.trim()) {
-      setStatus('The model returned an empty reply. Try again or choose another model.', 'error');
-    } else {
-      setStatus('');
+      throw new Error(
+        result.finishReason === 'length'
+          ? `The model used its whole output budget (${maxTokens.toLocaleString('en-GB')} tokens) on reasoning and wrote nothing. Set Reasoning effort to Low or raise Max output tokens under Model & advanced settings.`
+          : 'The model returned an empty reply. Try again or choose another model.',
+      );
     }
+    setStatus('');
   } catch (e) {
     if (e.name === 'AbortError') {
       setStatus('Stopped.', 'info');
@@ -502,13 +558,15 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
       setStatus(`Error: ${e.message}`, 'error');
       if (e.status === 401) openSettings();
     }
-    if (!assistant.content && !appendTo) {
+    if (!assistant.content.trim() && !appendTo) {
       // drop the empty reply (and its prompt) so a retry starts cleanly
       session.turns.splice(session.turns.indexOf(assistant), 1);
       if (userTurn && session.turns.length > 1) session.turns.splice(session.turns.indexOf(userTurn), 1);
       if (userTurn?.kind === 'followup' && !$('#followupInput').value) $('#followupInput').value = userTurn.content;
     }
   } finally {
+    clearInterval(ticker);
+    thinking.hidden = true;
     clearTimeout(renderTimer);
     state.controller = null;
     setBusy(false);
@@ -715,6 +773,9 @@ function wire() {
     generate();
   });
   $('#stopBtn').addEventListener('click', () => state.controller?.abort());
+  $('#thinking').addEventListener('toggle', () => {
+    if ($('#thinking').open) $('#thinkingText').textContent = state.thinkingText.slice(-4000);
+  });
 
   $('#revealBtn').addEventListener('click', () => {
     state.answersRevealed = !state.answersRevealed;

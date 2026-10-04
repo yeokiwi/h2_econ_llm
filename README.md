@@ -14,6 +14,17 @@ A website that uses the [OpenRouter](https://openrouter.ai) API to generate Sing
 - **Figures** are drawn as real charts with a data-table view. Economics diagrams in answers are described in words and drawn as labelled ASCII sketches.
 - **Other features**: copy, download as Markdown (with or without answers, with figures turned into tables), print (answers print only when revealed), history saved in the browser, light and dark themes, a mobile layout, and any OpenRouter model (`anthropic/claude-sonnet-5.5` by default).
 
+## Model, reasoning and speed
+
+Pick the model under **Model & advanced settings**. Type to search OpenRouter's catalogue, or paste any model ID.
+
+Many current models reason before they write. That reasoning counts against the output-token budget, and at high effort it can take minutes before any text appears. Examples are `anthropic/claude-sonnet-5.5` (default effort *high*) and `google/gemini-3.5-flash`. To avoid long waits:
+
+- **Reasoning effort** defaults to **Low**. The site sends the nearest level the chosen model supports; some DeepSeek models only offer *high*, for example. Choose **Model default** to send no reasoning setting at all.
+- **Max output tokens** defaults to 32,000. It is capped at the model's own limit.
+- **While the model is thinking**, the page shows elapsed time and how much it has reasoned so far. You can expand **Show the model's reasoning** to watch it.
+- **If nothing at all arrives for 2 minutes**, the request stops with an error instead of hanging.
+
 ## Running it
 
 The site is plain HTML, CSS and JavaScript with no build step. It needs to be served over HTTP because it loads `SKILL.md` at runtime.
