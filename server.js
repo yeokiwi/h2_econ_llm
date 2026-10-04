@@ -1,13 +1,16 @@
 // Zero-dependency server for the H2 Econs Question Lab.
 //
+// - Reads settings from .env (see .env.example); real environment variables win.
 // - Serves index.html, SKILL.md and assets/.
+// - Tells the page which OpenRouter model to use (OPENROUTER_MODEL).
 // - If OPENROUTER_API_KEY is set, exposes POST /api/chat, which forwards the
 //   request to OpenRouter with the server's key so users don't need their own.
 //   Set ACCESS_CODE to stop strangers spending your credits.
 //
-// Usage: OPENROUTER_API_KEY=sk-or-... ACCESS_CODE=letmein node server.js
+// Usage: cp .env.example .env, edit it, then: node server.js
 
 import http from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import { timingSafeEqual } from 'node:crypto';
@@ -15,13 +18,41 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+
+// Minimal .env loader: KEY=value lines, # comments, optional quotes and
+// "export " prefix. Variables already set in the environment are kept.
+function parseEnv(text) {
+  const out = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!m) continue;
+    let value = m[2];
+    const quoted = /^(['"])(.*)\1$/.exec(value);
+    if (quoted) value = quoted[2];
+    else value = value.replace(/\s+#.*$/, '').trim();
+    out[m[1]] = value;
+  }
+  return out;
+}
+
+const envFile = process.env.ENV_FILE || path.join(ROOT, '.env');
+try {
+  for (const [k, v] of Object.entries(parseEnv(readFileSync(envFile, 'utf8')))) {
+    if (!(k in process.env)) process.env[k] = v;
+  }
+} catch (e) {
+  if (e.code !== 'ENOENT') console.warn(`Could not read ${envFile}: ${e.message}`);
+}
+
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const API_KEY = process.env.OPENROUTER_API_KEY || '';
 const ACCESS_CODE = process.env.ACCESS_CODE || '';
-const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || '';
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-5.5';
 const MAX_BODY = 2 * 1024 * 1024;
-const UPSTREAM = 'https://openrouter.ai/api/v1/chat/completions';
+const UPSTREAM = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -89,9 +120,10 @@ async function handleChat(req, res) {
   } catch (e) {
     return send(res, e.status || 400, { error: { message: e.status ? e.message : 'Invalid JSON body' } });
   }
-  if (!body || !Array.isArray(body.messages) || !body.model) {
-    return send(res, 400, { error: { message: 'Body needs "model" and "messages".' } });
+  if (!body || !Array.isArray(body.messages)) {
+    return send(res, 400, { error: { message: 'Body needs "messages".' } });
   }
+  body.model = MODEL; // the model is fixed by the server's .env, whatever the page sends
 
   const controller = new AbortController();
   res.on('close', () => controller.abort());
@@ -129,8 +161,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
     if (url.pathname === '/api/config') {
-      if (!API_KEY) return send(res, 200, { proxy: false });
-      return send(res, 200, { proxy: true, requiresAccessCode: Boolean(ACCESS_CODE), defaultModel: DEFAULT_MODEL });
+      return send(res, 200, { proxy: Boolean(API_KEY), requiresAccessCode: Boolean(API_KEY && ACCESS_CODE), model: MODEL });
     }
     if (url.pathname === '/api/chat') {
       if (req.method !== 'POST') return send(res, 405, 'Method not allowed', { Allow: 'POST' });
@@ -160,5 +191,5 @@ server.listen(PORT, HOST, () => {
   const mode = API_KEY
     ? `proxy mode (server key${ACCESS_CODE ? ', access code required' : ''})`
     : 'browser mode (users enter their own OpenRouter key)';
-  console.log(`H2 Econs Question Lab on http://localhost:${server.address().port} — ${mode}`);
+  console.log(`H2 Econs Question Lab on http://localhost:${server.address().port} — ${mode}, model ${MODEL}`);
 });

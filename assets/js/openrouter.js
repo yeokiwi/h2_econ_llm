@@ -147,7 +147,7 @@ export async function streamChat({
   };
   const stalled = () =>
     new OpenRouterError(
-      `No data from OpenRouter for ${Math.round(idleTimeoutMs / 1000)} seconds, so the request was stopped. Try again or choose another model.`,
+      `No data from OpenRouter for ${Math.round(idleTimeoutMs / 1000)} seconds, so the request was stopped. Try again, or set a different OPENROUTER_MODEL in .env.`,
       null,
     );
 

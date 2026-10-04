@@ -15,15 +15,15 @@ A website that uses the [OpenRouter](https://openrouter.ai) API to generate Sing
   - Case-study data figures (line and bar charts) come with a data-table view.
   - Economics diagrams (D&S, tax/subsidy, externality and DWL, firm cost/revenue, PPC, AD/AS, tariff, Lorenz) are drawn with labelled curves, shifted curves highlighted, equilibrium points with dashed P0/Q0 guides, shaded areas and shift arrows.
   - Equilibria are worked out from where the curves actually cross, so the points always sit on the lines.
-- **Other features**: copy, download as Markdown (with or without answers, with figures turned into tables), print (answers print only when revealed), history saved in the browser, light and dark themes, a mobile layout, and any OpenRouter model (`anthropic/claude-sonnet-5.5` by default).
+- **Other features**: copy, download as Markdown (with or without answers, with figures turned into tables), print (answers print only when revealed), history saved in the browser, light and dark themes, a mobile layout, and any OpenRouter model, set in `.env` (`anthropic/claude-sonnet-5.5` by default).
 
 ## Model, reasoning and speed
 
-Pick the model under **Model & advanced settings**. Type to search OpenRouter's catalogue, or paste any model ID.
+The model is set by `OPENROUTER_MODEL` in `.env` (see [Configuration](#configuration)), not in the page. Each generated paper shows which model wrote it.
 
 Many current models reason before they write. That reasoning counts against the output-token budget, and at high effort it can take minutes before any text appears. Examples are `anthropic/claude-sonnet-5.5` (default effort *high*) and `google/gemini-3.5-flash`. To avoid long waits:
 
-- **Reasoning effort** defaults to **Low**. The site sends the nearest level the chosen model supports; some DeepSeek models only offer *high*, for example. Choose **Model default** to send no reasoning setting at all.
+- **Reasoning effort** (under **Advanced settings**) defaults to **Low**. The site sends the nearest level the chosen model supports; some DeepSeek models only offer *high*, for example. Choose **Model default** to send no reasoning setting at all.
 - **Max output tokens** defaults to 32,000. It is capped at the model's own limit.
 - **While the model is thinking**, the page shows elapsed time and how much it has reasoned so far. You can expand **Show the model's reasoning** to watch it.
 - **If nothing at all arrives for 2 minutes**, the request stops with an error instead of hanging.
@@ -32,32 +32,42 @@ Many current models reason before they write. That reasoning counts against the 
 
 The site is plain HTML, CSS and JavaScript with no build step. It needs to be served over HTTP because it loads `SKILL.md` at runtime.
 
+### Configuration
+
+Settings live in a `.env` file next to `server.js`. It is ignored by git, so your key never gets committed.
+
+```bash
+cp .env.example .env
+# then edit .env, e.g. OPENROUTER_MODEL=openai/gpt-5.5
+npm start
+```
+
+| Variable | Purpose |
+|---|---|
+| `OPENROUTER_MODEL` | The OpenRouter model used for every request, e.g. `anthropic/claude-sonnet-5.5` (the default) or `openai/gpt-5.5`. Restart the server after changing it. |
+| `OPENROUTER_API_KEY` | Optional. Turns on proxy mode (Option 2 below). |
+| `ACCESS_CODE` | Code users must enter before using the server's key. Recommended with `OPENROUTER_API_KEY`. |
+| `PORT`, `HOST` | Where to listen. Defaults are `8080` and `0.0.0.0`. |
+
+Variables already set in the shell take precedence over `.env`. The page reads the model from the server at `/api/config`. When the server holds the key, it also replaces the model in every request, so the browser can't switch it.
+
 ### Option 1: each user brings their own OpenRouter key
 
 ```bash
-npm start            # or: python3 -m http.server 8080
+npm start
 ```
 
 Open <http://localhost:8080>, click **API key** and paste a key from <https://openrouter.ai/keys>. The browser calls OpenRouter directly. The key is kept for the session, or saved in `localStorage` if you tick "Remember on this device".
 
-This mode also works on any static host, such as GitHub Pages: publish the repository root.
+This mode also works on a static host such as GitHub Pages (publish the repository root) or with `python3 -m http.server`. With no server there is no `.env`, so the page uses `anthropic/claude-sonnet-5.5`. To change it there, edit `FALLBACK_MODEL` in `assets/js/app.js`.
 
 ### Option 2: the server holds the key
 
-```bash
-OPENROUTER_API_KEY=sk-or-v1-... ACCESS_CODE=choose-a-code npm start
-```
+Set `OPENROUTER_API_KEY` (and `ACCESS_CODE`) in `.env`, then `npm start`.
 
 The browser then sends requests to `POST /api/chat` on `server.js`, which forwards them to OpenRouter with the server's key. Users don't need a key of their own.
 
 **Set `ACCESS_CODE` on any public deployment**, or anyone who finds the URL can spend your credits. Users enter the code under **API key**.
-
-| Variable | Purpose |
-|---|---|
-| `OPENROUTER_API_KEY` | Turns on proxy mode. |
-| `ACCESS_CODE` | Code users must enter before using the server's key (recommended). |
-| `OPENROUTER_MODEL` | Default model shown to users, e.g. `openai/gpt-5.5`. |
-| `PORT`, `HOST` | Where to listen. Defaults are `8080` and `0.0.0.0`. |
 
 `server.js` serves only `index.html`, `SKILL.md` and `assets/`. It needs Node 18 or later and has no dependencies.
 
