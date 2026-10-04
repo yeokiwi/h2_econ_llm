@@ -601,6 +601,28 @@ input[type='radio'] {
   color: var(--danger);
 }
 
+.thinking {
+  margin: -8px 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.thinking summary {
+  cursor: pointer;
+}
+
+.thinking pre {
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: var(--code-bg);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
 @keyframes pulse {
   50% {
     opacity: 0.25;
@@ -1138,6 +1160,7 @@ input[type='radio'] {
   .banner,
   .doc-toolbar,
   .status,
+  .thinking,
   .followup,
   #answerActions,
   #continueActions,

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSSEParser, streamChat } from '../assets/js/openrouter.js';
+import { createSSEParser, streamChat, reasoningFor } from '../assets/js/openrouter.js';
 
 test('SSE parser handles split chunks, comments, CRLF and [DONE]', () => {
   const got = [];
@@ -70,4 +70,49 @@ test('streamChat surfaces HTTP and mid-stream errors', async (t) => {
     sseResponse([{ choices: [{ delta: { content: 'partial' } }] }, { error: { message: 'Provider overloaded', code: 502 } }]),
   );
   await assert.rejects(streamChat({ endpoint: 'x', body: {}, onDelta() {} }), /Provider overloaded/);
+});
+
+test('reasoningFor picks a supported effort, preferring the lower neighbour', () => {
+  const sonnet = { reasoning: { supported_efforts: ['max', 'xhigh', 'high', 'medium', 'low'] } };
+  const gemini = { reasoning: { supported_efforts: ['high', 'medium', 'low', 'minimal'] } };
+  const deepseek = { reasoning: { supported_efforts: ['xhigh', 'high'] } };
+  const plain = { reasoning: null };
+  assert.deepEqual(reasoningFor('low', sonnet), { effort: 'low' });
+  assert.deepEqual(reasoningFor('low', gemini), { effort: 'low' });
+  assert.deepEqual(reasoningFor('low', deepseek), { effort: 'high' });
+  assert.deepEqual(reasoningFor('medium', { reasoning: { supported_efforts: ['low', 'high'] } }), { effort: 'low' });
+  assert.equal(reasoningFor('low', plain), undefined); // model doesn't reason
+  assert.deepEqual(reasoningFor('low', undefined), { effort: 'low' }); // catalogue not loaded
+  assert.equal(reasoningFor('default', sonnet), undefined);
+});
+
+test('streamChat reports reasoning_details and stops a stalled stream', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    const enc = new TextEncoder();
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_details: [{ type: 'reasoning.summary', summary: 'Plan' }] } }] })}\n\n`));
+        // then never send anything else, until aborted
+        init.signal.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError')));
+      },
+    });
+    return new Response(stream, { status: 200 });
+  });
+  let reasoning = '';
+  await assert.rejects(
+    streamChat({ endpoint: 'x', body: {}, onDelta() {}, onReasoning: (r) => (reasoning += r), idleTimeoutMs: 50 }),
+    /No data from OpenRouter/,
+  );
+  assert.equal(reasoning, 'Plan');
+});
+
+test('a user abort is reported as AbortError, not a stall', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url, init) =>
+    new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
+  );
+  const ac = new AbortController();
+  setTimeout(() => ac.abort(), 20);
+  await assert.rejects(streamChat({ endpoint: 'x', body: {}, signal: ac.signal, onDelta() {}, idleTimeoutMs: 5000 }), {
+    name: 'AbortError',
+  });
 });

@@ -143,6 +143,16 @@
           <datalist id="modelList"></datalist>
           <small class="hint" id="modelHint">Any model ID from openrouter.ai/models.</small>
         </label>
+        <label class="field">
+          <span class="label">Reasoning effort</span>
+          <select name="reasoningEffort">
+            <option value="low" selected>Low (fastest)</option>
+            <option value="medium">Medium</option>
+            <option value="high">High (slowest)</option>
+            <option value="default">Model default</option>
+          </select>
+          <small class="hint">Many models think before writing, and that thinking uses up the output budget. Higher effort can mean minutes before any text appears.</small>
+        </label>
         <div class="field-row">
           <label class="field">
             <span class="label">Temperature <output id="tempOut">0.7</output></span>
@@ -150,7 +160,7 @@
           </label>
           <label class="field">
             <span class="label">Max output tokens</span>
-            <input type="number" name="maxTokens" min="1000" max="64000" step="1000" value="16000">
+            <input type="number" name="maxTokens" min="1000" max="128000" step="1000" value="32000">
           </label>
         </div>
       </details>
@@ -191,6 +201,10 @@
         </div>
 
         <div class="status" id="status" hidden></div>
+        <details class="thinking" id="thinking" hidden>
+          <summary>Show the model's reasoning</summary>
+          <pre id="thinkingText"></pre>
+        </details>
         <div class="md" id="questions"></div>
 
         <div class="answers-block" id="answersBlock" hidden>
