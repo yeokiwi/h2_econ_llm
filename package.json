@@ -1,0 +1,14 @@
+{
+  "name": "h2-econ-question-lab",
+  "version": "1.0.0",
+  "description": "Generate Singapore-Cambridge A-Level H2 Economics (9570) questions and answers with OpenRouter, guided by SKILL.md.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js"
+  }
+}

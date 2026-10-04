@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H2 Econs Question Lab</title>
+  <meta name="description" content="Generate Singapore-Cambridge A-Level H2 Economics (9570) case studies, essays, model answers and mark schemes with OpenRouter.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M7 23 L13 15 L18 19 L25 9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/18.0.14/lib/marked.umd.min.js" integrity="sha512-trN9mtGYvoySPVI909KTnwbJI9AkKPydRCV/qAsUG1+q39hhpKltEag9b5JpdjeIZn5i8IH62hHRFdbKwMFh9w==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.4.16/purify.min.js" integrity="sha512-flQmhkXNRQ3iUfvtdCobtpMjCb6kE+zLnTiAulAQJ3WykVfy84JvCMOo6vhwWXHTXjR25h9Zj+LyGFRWKjRoag==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js" integrity="sha512-WoViKhKD4qI2WruSZqv9+kvM4WfFhUMQCLN4QlDTt5aU56fLQy2gYoxWIqlEnXqJy/+Ac5q/hk1oWfqnMDhwMA==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script type="module" src="assets/js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>H2 Econs Question Lab</h1>
+        <p class="brand-sub">Singapore-Cambridge A-Level Economics 9570 · powered by OpenRouter</p>
+      </div>
+    </div>
+    <nav class="topbar-actions">
+      <button type="button" class="btn btn-ghost" id="historyBtn">History</button>
+      <button type="button" class="btn btn-ghost" id="settingsBtn">
+        <span class="status-dot" id="keyDot" aria-hidden="true"></span>API key
+      </button>
+      <button type="button" class="btn btn-ghost icon-btn" id="themeBtn" aria-label="Toggle colour theme" title="Toggle colour theme">◐</button>
+    </nav>
+  </header>
+
+  <div class="banner" id="banner" hidden></div>
+
+  <main class="layout">
+    <form class="panel controls" id="genForm" autocomplete="off">
+      <fieldset class="field">
+        <legend>What to generate</legend>
+        <div class="segmented" role="radiogroup">
+          <label><input type="radio" name="type" value="case-study" checked><span><strong>Case study</strong><small>Paper 1 · 30 marks</small></span></label>
+          <label><input type="radio" name="type" value="essay"><span><strong>Essay</strong><small>Paper 2 · 10 + 15 marks</small></span></label>
+          <label><input type="radio" name="type" value="short-questions"><span><strong>Practice set</strong><small>Stand-alone part-questions</small></span></label>
+        </div>
+      </fieldset>
+
+      <div class="field-row" data-show-for="essay" hidden>
+        <label class="field">
+          <span class="label">Section</span>
+          <select name="essaySection">
+            <option value="auto">Match the topics</option>
+            <option value="A">Section A (micro)</option>
+            <option value="B">Section B (macro)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Number of essays</span>
+          <select name="essayCount">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="field-row" data-show-for="short-questions" hidden>
+        <label class="field">
+          <span class="label">Questions</span>
+          <select name="shortCount">
+            <option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>8</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Mark value</span>
+          <select name="shortMarks">
+            <option value="mixed">Mixed</option>
+            <option value="2">2 marks</option>
+            <option value="4">4 marks</option>
+            <option value="8">8 marks</option>
+            <option value="10">10 marks</option>
+          </select>
+        </label>
+      </div>
+
+      <fieldset class="field">
+        <legend>
+          Syllabus topics
+          <span class="legend-note" id="topicCount">Examiner's choice</span>
+        </legend>
+        <div class="topics" id="topics"></div>
+        <button type="button" class="link-button" id="clearTopics">Clear selection</button>
+      </fieldset>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="label">Context</span>
+          <select name="context">
+            <option value="mixed">Any contemporary context</option>
+            <option value="singapore">Singapore</option>
+            <option value="international">Another economy / global</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Difficulty</span>
+          <select name="difficulty">
+            <option value="standard">A-Level standard</option>
+            <option value="challenging">Challenging prelim</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="label">Specific issue <small>(optional)</small></span>
+        <input type="text" name="customContext" placeholder="e.g. Japan's weak yen and overtourism">
+      </label>
+
+      <fieldset class="field">
+        <legend>Include</legend>
+        <div class="radio-list">
+          <label><input type="radio" name="output" value="questions"> Questions only</label>
+          <label><input type="radio" name="output" value="answers" checked> Questions + suggested answers</label>
+          <label><input type="radio" name="output" value="full"> Questions + answers + mark scheme</label>
+        </div>
+      </fieldset>
+
+      <label class="field" id="answerStyleField">
+        <span class="label">Answer style</span>
+        <select name="answerStyle">
+          <option value="model">Full model answers</option>
+          <option value="outline">Answer outlines</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="label">Extra instructions <small>(optional)</small></span>
+        <textarea name="notes" rows="2" placeholder="e.g. include a tariff diagram question; avoid healthcare"></textarea>
+      </label>
+
+      <details class="advanced">
+        <summary>Model &amp; advanced settings</summary>
+        <label class="field">
+          <span class="label">OpenRouter model</span>
+          <input type="text" name="model" list="modelList" spellcheck="false" placeholder="anthropic/claude-sonnet-5.5">
+          <datalist id="modelList"></datalist>
+          <small class="hint" id="modelHint">Any model ID from openrouter.ai/models.</small>
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span class="label">Temperature <output id="tempOut">0.7</output></span>
+            <input type="range" name="temperature" min="0" max="1.5" step="0.1" value="0.7">
+          </label>
+          <label class="field">
+            <span class="label">Max output tokens</span>
+            <input type="number" name="maxTokens" min="1000" max="64000" step="1000" value="16000">
+          </label>
+        </div>
+      </details>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" id="generateBtn">Generate</button>
+        <button type="button" class="btn" id="stopBtn" hidden>Stop</button>
+      </div>
+    </form>
+
+    <section class="panel output" id="output" aria-live="polite">
+      <div class="empty" id="emptyState">
+        <h2>Set a paper in the style of the A-Level</h2>
+        <p>Pick a paper type, topics and context, then press <strong>Generate</strong>. Questions follow the 2026 H2 Economics (9570) syllabus, with suggested answers and mark schemes in the JC prelim style from <code>SKILL.md</code>.</p>
+        <ul class="empty-list">
+          <li><strong>Case study</strong>: extracts, data tables and figures, and 6–7 part-questions totalling 30 marks.</li>
+          <li><strong>Essay</strong>: a preamble, then (a) [10] and (b) [15].</li>
+          <li><strong>Practice set</strong>: short data-response or higher-order questions with their own stimulus.</li>
+        </ul>
+        <p class="muted">Answers stay hidden until you reveal them, so you can attempt the questions first.</p>
+      </div>
+
+      <article class="doc" id="doc" hidden>
+        <div class="doc-toolbar">
+          <div class="doc-meta" id="docMeta"></div>
+          <div class="doc-actions">
+            <button type="button" class="btn btn-small" id="copyBtn">Copy</button>
+            <div class="menu">
+              <button type="button" class="btn btn-small" id="downloadBtn" aria-haspopup="true" aria-expanded="false">Download</button>
+              <div class="menu-list" id="downloadMenu" hidden>
+                <button type="button" data-download="questions">Questions only (.md)</button>
+                <button type="button" data-download="all">With answers (.md)</button>
+              </div>
+            </div>
+            <button type="button" class="btn btn-small" id="printBtn">Print</button>
+            <button type="button" class="btn btn-small" id="regenBtn">Regenerate</button>
+          </div>
+        </div>
+
+        <div class="status" id="status" hidden></div>
+        <div class="md" id="questions"></div>
+
+        <div class="answers-block" id="answersBlock" hidden>
+          <div class="answers-bar">
+            <div>
+              <h2 class="answers-heading">Suggested answers</h2>
+              <p class="muted" id="answersNote"></p>
+            </div>
+            <button type="button" class="btn" id="revealBtn">Reveal answers</button>
+          </div>
+          <div class="md" id="answers" hidden></div>
+        </div>
+
+        <div class="form-actions" id="answerActions" hidden>
+          <button type="button" class="btn" id="genAnswersBtn">Generate suggested answers</button>
+        </div>
+        <div class="form-actions" id="continueActions" hidden>
+          <p class="muted">The reply stopped at the output-token limit.</p>
+          <button type="button" class="btn" id="continueBtn">Continue writing</button>
+        </div>
+
+        <div class="thread" id="thread"></div>
+
+        <form class="followup" id="followupForm">
+          <label for="followupInput" class="label">Follow-up</label>
+          <textarea id="followupInput" rows="3" placeholder="Paste your answer to mark it, ask for a diagram to be explained, or ask for a harder version of a question."></textarea>
+          <div class="followup-actions">
+            <div class="chips" id="chips">
+              <button type="button" class="chip" data-prompt="Mark my answer to question ___ using the mark scheme conventions (workflow B). My answer:&#10;">Mark my answer</button>
+              <button type="button" class="chip" data-prompt="Make question ___ harder, keeping the same case material, and give its suggested answer.">Make a question harder</button>
+              <button type="button" class="chip" data-prompt="Explain the key concepts and diagrams needed for this paper as a revision note (workflow D).">Revision notes</button>
+            </div>
+            <button type="submit" class="btn btn-primary" id="followupBtn">Send</button>
+          </div>
+        </form>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form method="dialog" id="settingsForm">
+      <h2>OpenRouter API key</h2>
+      <p class="muted" id="proxyNote">Requests go straight from your browser to OpenRouter using your key. Get one at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>.</p>
+      <label class="field">
+        <span class="label">API key</span>
+        <input type="password" id="apiKeyInput" placeholder="sk-or-v1-…" spellcheck="false" autocomplete="off">
+      </label>
+      <label class="check"><input type="checkbox" id="rememberKey"> Remember on this device</label>
+      <label class="field" id="accessCodeField" hidden>
+        <span class="label">Access code</span>
+        <input type="password" id="accessCodeInput" spellcheck="false" autocomplete="off">
+        <small class="hint">The server holds the API key and asks for this code.</small>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-ghost" id="clearKeyBtn">Forget key</button>
+        <button value="save" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="historyDialog" class="dialog dialog-wide">
+    <div class="dialog-head">
+      <h2>History</h2>
+      <button type="button" class="btn btn-ghost btn-small" id="clearHistoryBtn">Clear all</button>
+    </div>
+    <p class="muted">Saved in this browser only.</p>
+    <ul class="history-list" id="historyList"></ul>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="closeHistoryBtn">Close</button>
+    </div>
+  </dialog>
+</body>
+</html>
