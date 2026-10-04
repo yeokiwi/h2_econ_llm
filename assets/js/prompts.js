@@ -32,6 +32,17 @@ export const CHART_SPEC = `\`\`\`chart
  "source": "Adapted from Department of Statistics"}
 \`\`\``;
 
+export const DIAGRAM_SPEC = `\`\`\`diagram
+{"title": "Figure 1: Increase in demand for hotel rooms", "xLabel": "Quantity of hotel rooms", "yLabel": "Price",
+ "curves": [{"label": "S0", "points": [[1, 1.5], [8.5, 9]]},
+            {"label": "D0", "points": [[1, 8], [8, 1]]},
+            {"label": "D1", "points": [[2.5, 9.5], [9.5, 2.5]], "emphasis": "new"}],
+ "points": [{"label": "e0", "intersect": ["S0", "D0"], "xTick": "Q0", "yTick": "P0"},
+            {"label": "e1", "intersect": ["S0", "D1"], "xTick": "Q1", "yTick": "P1"}],
+ "areas": [{"label": "ΔTR", "polygon": ["e0@y", "e1@y", "e1", "e1@x", "e0@x", "e0"], "tone": "blue"}],
+ "arrows": [{"from": [6.2, 3], "to": [7.4, 4.2]}]}
+\`\`\``;
+
 export function buildSystemPrompt(skill) {
   return `You are an experienced Singapore JC economics tutor and Cambridge examiner who sets and marks Singapore-Cambridge A-Level H2 Economics (9570) papers. You follow the skill reference below exactly: its syllabus scope limits, command-word conventions, mark schemes, analytical chains, evaluation (Stand + ATMS) and answer style. Use Singapore/British spelling.
 
@@ -45,7 +56,16 @@ ${skill.trim()}
 - Present tables of data as Markdown tables, labelled "Table 1: ..." and with a source line.
 - Present any line or bar chart data (e.g. "Figure 1") as a fenced \`chart\` block containing only valid JSON, which the website draws as a chart. "type" is "line" or "bar"; every series must have one number (or null) per label; use at most 4 series. A chart has one y-axis, so series with different units or very different scales go in separate figures (or are indexed to a common base year). Example:
 ${CHART_SPEC}
-- Economics diagrams in answers (D&S, AD/AS, PPC, externality, firm, tariff, Lorenz) cannot be drawn as images. Give each a figure label, describe it precisely (axes, curves, shifts with subscripts 0/1/2, points, shaded areas) and add a compact labelled ASCII sketch in a plain fenced code block.
+- Draw every economics diagram (D&S, tax/subsidy, price controls, externality, firm cost/revenue, PPC, AD/AS, tariff, Lorenz curve) as a fenced \`diagram\` block containing only valid JSON, which the website draws. Never use ASCII sketches. Rules:
+  - Coordinates run from 0 to 10 on both axes (set "xMax"/"yMax" only if you need more room). Keep curves inside the plot and leave space at their ends for labels.
+  - Each curve has a "label" (S0, D1, MSC, MPB, AD0, AS, LRAS, PPC0, AR, MR, MC, AC, Pw, Pw+t, Line of equality, ...) and two or more "points"; give a curve "smooth": true for curved shapes (PPC, MC, AC, Keynesian AS, Lorenz). Give shifted or new curves "emphasis": "new" and the original ones no emphasis.
+  - Mark equilibria and other key points with "points": use "intersect": ["S0", "D1"] so the point sits exactly where the curves cross (or "at": [x, y]), plus "xTick"/"yTick" labels such as "Q1"/"P1" for the dashed guides to the axes.
+  - Shade areas (DWL, CS, PS, tax revenue, change in revenue, supernormal profit, Lorenz area A) with "areas": a "polygon" whose vertices are [x, y] pairs or point labels, where "e1" is the point itself, "e1@x" its foot on the x-axis and "e1@y" its foot on the y-axis; "curve:NAME" splices in a whole curve (and "curve:NAME:rev" the same curve in reverse) so the area follows it. Name every corner you need as a point first, so vertices sit exactly on the curves. "tone" is "blue", "orange", "green", "red" or "violet".
+  - A point with "marker": false draws no dot, e.g. {"at": [8, 0], "xTick": "Yf", "marker": false, "guides": false} for a full-employment tick.
+  - Show shifts with "arrows": {"from": [x, y], "to": [x, y]}.
+  - Give the diagram a title such as "Figure 1: ..." and refer to it in the text ("As shown in Figure 1, P rises from P0 to P1").
+  Example (an increase in demand):
+${DIAGRAM_SPEC}
 - When answers are requested, write the questions first, then a line containing exactly "${ANSWER_MARKER}" on its own, then the answers. Never put answers, hints or mark allocations before that line. Do not write that line when answers are not requested.
 - Do not add any preamble or closing remarks outside the paper itself.`;
 }

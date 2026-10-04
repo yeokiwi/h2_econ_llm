@@ -11,6 +11,7 @@ import {
 } from './prompts.js';
 import { OPENROUTER_URL, streamChat, fetchModels, reasoningFor } from './openrouter.js';
 import { parseChartSpec, createChartFigure, chartsToTables } from './charts.js';
+import { parseDiagramSpec, createDiagramFigure, diagramsToText } from './diagrams.js';
 
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-5.5';
 const SUGGESTED_MODELS = [
@@ -67,7 +68,13 @@ const state = {
 };
 
 // ---------- Markdown rendering ----------
-const chartCache = new Map(); // spec text -> figure element, so streaming re-renders don't redraw charts
+const chartCache = new Map(); // block text -> figure element, so streaming re-renders don't redraw charts
+
+// Fenced blocks the website draws with Chart.js: data charts and economics diagrams.
+const FIGURE_KINDS = {
+  chart: { parse: parseChartSpec, create: (r) => createChartFigure(r.spec), noun: 'figure' },
+  diagram: { parse: parseDiagramSpec, create: (r) => createDiagramFigure(r.spec, r.warnings), noun: 'diagram' },
+};
 
 function renderMarkdown(target, markdown, { streaming = false } = {}) {
   if (!window.marked || !window.DOMPurify) {
@@ -77,28 +84,31 @@ function renderMarkdown(target, markdown, { streaming = false } = {}) {
   const html = window.marked.parse(markdown, { gfm: true, breaks: false });
   target.innerHTML = window.DOMPurify.sanitize(html);
 
-  target.querySelectorAll('pre > code.language-chart').forEach((code) => {
+  target.querySelectorAll('pre > code.language-chart, pre > code.language-diagram').forEach((code) => {
+    const lang = code.classList.contains('language-diagram') ? 'diagram' : 'chart';
+    const kind = FIGURE_KINDS[lang];
     const text = code.textContent;
+    const key = `${lang}:${text}`;
     const pre = code.parentElement;
-    let figure = chartCache.get(text);
+    let figure = chartCache.get(key);
     if (!figure) {
-      const parsed = parseChartSpec(text);
+      const parsed = kind.parse(text);
       if (!parsed.ok) {
         if (streaming) {
           const ph = document.createElement('div');
           ph.className = 'chart-placeholder';
-          ph.textContent = 'Drawing figure…';
+          ph.textContent = `Drawing ${kind.noun}…`;
           pre.replaceWith(ph);
         } else {
           const note = document.createElement('p');
           note.className = 'muted small';
-          note.textContent = `Could not draw this figure (${parsed.error}). Raw data:`;
+          note.textContent = `Could not draw this ${kind.noun} (${parsed.error}). Raw data:`;
           pre.before(note);
         }
         return;
       }
-      figure = createChartFigure(parsed.spec);
-      chartCache.set(text, figure);
+      figure = kind.create(parsed);
+      chartCache.set(key, figure);
       pre.replaceWith(figure);
       figure._draw();
       return;
@@ -703,7 +713,7 @@ function sessionMarkdown(includeAnswers) {
       if (t.role === 'assistant') md += `\n\n${t.content}`;
     });
   }
-  return chartsToTables(md);
+  return diagramsToText(chartsToTables(md));
 }
 
 function download(includeAnswers) {
