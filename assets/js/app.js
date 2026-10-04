@@ -13,14 +13,9 @@ import { OPENROUTER_URL, streamChat, fetchModels, reasoningFor } from './openrou
 import { parseChartSpec, createChartFigure, chartsToTables } from './charts.js';
 import { parseDiagramSpec, createDiagramFigure, diagramsToText } from './diagrams.js';
 
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-5.5';
-const SUGGESTED_MODELS = [
-  'anthropic/claude-sonnet-5.5',
-  'anthropic/claude-opus-5.5',
-  'openai/gpt-5.5',
-  'google/gemini-3.5-flash',
-  'deepseek/deepseek-v4-pro',
-];
+// The model is set by OPENROUTER_MODEL in the server's .env and read from
+// /api/config; this fallback is only used on static hosting with no server.
+const FALLBACK_MODEL = 'anthropic/claude-sonnet-5.5';
 const HISTORY_LIMIT = 25;
 const DEFAULT_MAX_TOKENS = 32000;
 
@@ -64,6 +59,7 @@ const state = {
   controller: null,
   busy: false,
   thinkingText: '', // reasoning streamed so far for the current request (not saved)
+  model: FALLBACK_MODEL, // from the server's .env via /api/config
   modelInfo: new Map(), // model id -> { maxCompletion, reasoning } from OpenRouter's catalogue
 };
 
@@ -189,11 +185,10 @@ function readSettings() {
 
 function readModelOptions() {
   const fd = new FormData(form);
-  const model = String(fd.get('model') || '').trim() || state.proxy?.defaultModel || DEFAULT_MODEL;
   const temperature = Number(fd.get('temperature'));
   const maxTokens = Number(fd.get('maxTokens')) || DEFAULT_MAX_TOKENS;
   const reasoningEffort = String(fd.get('reasoningEffort') || 'low');
-  return { model, temperature, maxTokens, reasoningEffort };
+  return { temperature, maxTokens, reasoningEffort };
 }
 
 function writeSettings(settings) {
@@ -235,7 +230,6 @@ function restoreForm() {
   const saved = store.get('h2econ.form');
   if (saved) {
     writeSettings(saved.settings || {});
-    if (saved.model) form.elements.model.value = saved.model;
     if (saved.temperature !== undefined) form.elements.temperature.value = saved.temperature;
     // 16000 was the old default, too small once reasoning tokens are counted
     if (saved.maxTokens && saved.maxTokens !== 16000) form.elements.maxTokens.value = saved.maxTokens;
@@ -271,12 +265,12 @@ async function detectProxy() {
     const res = await fetch('api/config', { headers: { Accept: 'application/json' } });
     if (!res.ok) return;
     const json = await res.json();
+    if (json && json.model) state.model = String(json.model);
     if (json && json.proxy) {
-      state.proxy = { requiresAccessCode: !!json.requiresAccessCode, defaultModel: json.defaultModel || '' };
+      state.proxy = { requiresAccessCode: !!json.requiresAccessCode };
       $('#proxyNote').textContent =
         "This server already holds an OpenRouter key, so you don't need your own. If you enter a key here, requests go straight to OpenRouter with it instead.";
       $('#accessCodeField').hidden = !state.proxy.requiresAccessCode;
-      if (state.proxy.defaultModel) form.elements.model.placeholder = state.proxy.defaultModel;
     }
   } catch {
     /* static hosting: no proxy */
@@ -298,26 +292,13 @@ async function loadSkill() {
   }
 }
 
+// OpenRouter's catalogue tells us each model's output limit and reasoning levels.
 async function loadModels() {
-  const list = $('#modelList');
-  const add = (id, label) => {
-    const opt = document.createElement('option');
-    opt.value = id;
-    if (label) opt.label = label;
-    list.append(opt);
-  };
-  SUGGESTED_MODELS.forEach((id) => add(id, 'Suggested'));
   try {
     const models = await fetchModels();
     models.forEach((m) => state.modelInfo.set(m.id, m));
-    const known = new Set(SUGGESTED_MODELS);
-    models
-      .filter((m) => !known.has(m.id))
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .forEach((m) => add(m.id, m.name));
-    $('#modelHint').textContent = `${models.length} models available. Type to search, e.g. "claude", "gpt", "gemini".`;
   } catch {
-    /* offline or blocked: the suggested list is enough */
+    /* offline or blocked: requests still work, just without those limits */
   }
 }
 
@@ -440,7 +421,7 @@ function renderSession({ streaming = false } = {}) {
 function requestMessages(session, extraTurns = []) {
   const turns = [...session.turns, ...extraTurns];
   const [firstUser, ...rest] = turns;
-  const messages = buildMessages(state.skill, session.settings, session.model);
+  const messages = buildMessages(state.skill, session.settings, state.model);
   messages[1].content = firstUser.content; // keep the original prompt
   for (const t of rest) messages.push({ role: t.role, content: t.content });
   return messages;
@@ -474,7 +455,7 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
   }
 
   const opts = readModelOptions();
-  const model = session.model;
+  const model = state.model;
   const info = state.modelInfo.get(model);
   const maxTokens = info?.maxCompletion ? Math.min(opts.maxTokens, info.maxCompletion) : opts.maxTokens;
   const reasoning = reasoningFor(opts.reasoningEffort, info);
@@ -504,7 +485,7 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
     if (secs >= 45) {
       text += reasoning?.effort === 'low' || reasoning?.effort === 'minimal'
         ? '. Long papers can take a few minutes.'
-        : '. For faster replies, set Reasoning effort to Low under Model & advanced settings.';
+        : '. For faster replies, set Reasoning effort to Low under Advanced settings.';
     }
     setStatus(text);
   };
@@ -556,8 +537,8 @@ async function runTurn(userTurn, { appendTo = null } = {}) {
     if (!assistant.content.trim()) {
       throw new Error(
         result.finishReason === 'length'
-          ? `The model used its whole output budget (${maxTokens.toLocaleString('en-GB')} tokens) on reasoning and wrote nothing. Set Reasoning effort to Low or raise Max output tokens under Model & advanced settings.`
-          : 'The model returned an empty reply. Try again or choose another model.',
+          ? `The model used its whole output budget (${maxTokens.toLocaleString('en-GB')} tokens) on reasoning and wrote nothing. Set Reasoning effort to Low or raise Max output tokens under Advanced settings.`
+          : 'The model returned an empty reply. Try again, or set a different OPENROUTER_MODEL in .env.',
       );
     }
     setStatus('');
@@ -613,14 +594,13 @@ async function generate() {
   hideBanner();
   persistForm();
   const settings = readSettings();
-  const { model } = readModelOptions();
   state.answersRevealed = false;
   chartCache.clear();
   state.session = {
     id: `s${Date.now().toString(36)}`,
     createdAt: new Date().toISOString(),
     settings,
-    model,
+    model: state.model,
     title: 'Generating…',
     turns: [],
   };
@@ -678,7 +658,6 @@ function renderHistory() {
       state.answersRevealed = false;
       chartCache.clear();
       writeSettings(item.settings);
-      form.elements.model.value = item.model;
       setStatus('');
       renderSession();
       $('#historyDialog').close();
@@ -803,7 +782,6 @@ function wire() {
   $('#regenBtn').addEventListener('click', () => {
     if (!state.session) return;
     writeSettings(state.session.settings);
-    form.elements.model.value = state.session.model;
     generate();
   });
 
